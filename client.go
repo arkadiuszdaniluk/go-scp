@@ -156,34 +156,37 @@ func (a *Client) CopyPassThru(ctx context.Context, r io.Reader, remotePath strin
 	errCh := make(chan error, 2)
 
 	go func() {
+		//let session.Start() run first
+		time.Sleep(1 * time.Second)
 		defer wg.Done()
 		defer w.Close()
 
 		_, err = fmt.Fprintln(w, "C"+permissions, size, filename)
 		if err != nil {
-			errCh <- err
+			errCh <- errors.New("failed to send file header: " + err.Error())
 			return
 		}
 
+		//cannot upload file due to this part
 		if err = checkResponse(stdout); err != nil {
-			errCh <- err
+			errCh <- errors.New(fmt.Sprintf("client response after sending header: %s", err))
 			return
 		}
 
 		_, err = io.Copy(w, r)
 		if err != nil {
-			errCh <- err
+			errCh <- errors.New("failed to send file contents: " + err.Error())
 			return
 		}
 
 		_, err = fmt.Fprint(w, "\x00")
 		if err != nil {
-			errCh <- err
+			errCh <- errors.New("failed to send file footer: " + err.Error())
 			return
 		}
 
 		if err = checkResponse(stdout); err != nil {
-			errCh <- err
+			errCh <- errors.New(fmt.Sprintf("client response after header: %s", err))
 			return
 		}
 	}()
@@ -192,7 +195,7 @@ func (a *Client) CopyPassThru(ctx context.Context, r io.Reader, remotePath strin
 		defer wg.Done()
 		err := session.Start(fmt.Sprintf("%s -qt %q", a.RemoteBinary, remotePath))
 		if err != nil {
-			errCh <- err
+			errCh <- errors.New("failed to start scp on remote: " + err.Error())
 			return
 		}
 	}()
